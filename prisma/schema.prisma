@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  @@unique([providerId, accountId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model AppointmentType {
+  id             String   @id
+  title          String   @unique
+  description    String
+  duration       Int
+  meetingType    String   @default("Video call")
+  preparation    String   @default("Bring any questions you would like to discuss.")
+  bufferMinutes  Int?
+  maxBookingDays  Int?
+  dailyLimit      Int?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Booking {
+  id          String   @id
+  reference   String   @unique
+  name        String
+  email       String
+  phone       String?
+  company     String?
+  message     String?
+  typeId      String
+  typeTitle   String
+  duration    Int
+  date        String
+  time        String
+  startMinute Int
+  status      String   @default("CONFIRMED")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([date, status])
+  @@index([email, reference])
+}
+
+model WorkingDay {
+  id        String   @id
+  weekday   Int      @unique
+  enabled   Boolean  @default(true)
+  periods   Json
+  updatedAt DateTime @updatedAt
+}
+
+model AvailabilityException {
+  id          String   @id
+  date        String   @unique
+  blocked     Boolean  @default(true)
+  description String
+  periods     Json?
+  createdAt   DateTime @default(now())
+}
+
+model SchedulingSettings {
+  id                String   @id @default("default")
+  timezone          String   @default("Asia/Manila")
+  minimumNoticeHour Int      @default(3)
+  bookingWindowDays Int      @default(60)
+  dailyLimit        Int      @default(10)
+  bufferMinutes    Int      @default(10)
+  updatedAt         DateTime @updatedAt
+}

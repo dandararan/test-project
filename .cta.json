@@ -1,0 +1,35 @@
+{
+  "bundler": "vite",
+  "projectName": "test-project",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "npm",
+  "includeExamples": false,
+  "tailwind": true,
+  "projectPreset": "default",
+  "routerOnly": false,
+  "addOnOptions": {
+    "prisma": {
+      "database": "postgres"
+    }
+  },
+  "git": true,
+  "install": true,
+  "intent": true,
+  "version": 1,
+  "framework": "react",
+  "chosenAddOns": [
+    "eslint",
+    "vercel",
+    "prisma",
+    "db",
+    "form",
+    "mcp",
+    "shadcn",
+    "t3env",
+    "table",
+    "better-auth",
+    "store",
+    "tanstack-query"
+  ]
+}
