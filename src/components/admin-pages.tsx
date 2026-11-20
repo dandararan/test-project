@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useRouter } from '@tanstack/react-router'
 import { ArrowLeft, ArrowRight, CalendarDays, Clock3, Edit3, Search, Trash2, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Textarea } from '#/components/ui/textarea'
 import { getAvailableTimes, getBookingAnalytics, cancelAdminBooking, getAdminBookings, getAdminSettings, removeAppointmentType, removeAvailabilityException, rescheduleAdminBooking, saveAppointmentType, saveAvailabilityException, saveWorkingDay, updateAdminBooking, updateAdminProfile, updateScheduleSettings } from '#/lib/scheduling.functions'
+import { formatTimeRange } from '#/lib/time-range'
 import type { AdminProfile } from '#/components/admin-shell'
 
 type Booking = Awaited<ReturnType<typeof getAdminBookings>>[number]
@@ -23,6 +24,13 @@ type ScheduleData = Awaited<ReturnType<typeof getAdminSettings>>
 type AppointmentType = ScheduleData['types'][number]
 type Report = Awaited<ReturnType<typeof getBookingAnalytics>>
 type Period = { start: number; end: number }
+const chartBuckets = (points: Report['byDay']) => {
+  const bucketSize = Math.max(1, Math.ceil(points.length / 30))
+  return Array.from({ length: Math.ceil(points.length / bucketSize) }, (_, index) => {
+    const days = points.slice(index * bucketSize, (index + 1) * bucketSize)
+    return { label: days[0]?.label ?? '', endLabel: days.at(-1)?.label ?? '', value: days.reduce((total, day) => total + day.value, 0) }
+  })
+}
 const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const pad = (value: number) => String(value).padStart(2, '0')
 const dateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -133,15 +141,40 @@ export function AnalyticsPage({ initial }: { initial: Report }) {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [busy, setBusy] = useState(false)
+  const requestSequence = useRef(0)
   useEffect(() => setReport(initial), [initial])
-  const load = async (days: number) => { setBusy(true); try { setReport(await getBookingAnalytics({ data: { days: Math.max(1, Math.min(days, 365)) } })) } catch { toast.error('Could not load analytics for that range.') } finally { setBusy(false) } }
+  const load = async (days: number) => {
+    const requestId = ++requestSequence.current
+    setBusy(true)
+    try {
+      const nextReport = await getBookingAnalytics({ data: { days: Math.max(1, Math.min(days, 365)) } })
+      if (requestId === requestSequence.current) setReport(nextReport)
+    } catch {
+      if (requestId === requestSequence.current) toast.error('Could not load analytics for that range.')
+    } finally {
+      if (requestId === requestSequence.current) setBusy(false)
+    }
+  }
   const changeRange = (value: string) => { setRange(value); if (value !== 'custom') void load(Number(value)) }
-  const applyCustom = async () => { if (!from || !to || from > to) { toast.error('Choose a valid date range.'); return } setBusy(true); try { setReport(await getBookingAnalytics({ data: { from, to } })) } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not load analytics for that range.') } finally { setBusy(false) } }
-  const maxDaily = Math.max(1, ...report.byDay.map((entry) => entry.value))
+  const applyCustom = async () => {
+    if (!from || !to || from > to) { toast.error('Choose a valid date range.'); return }
+    if ((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000 >= 365) { toast.error('Choose a date range of 365 days or less.'); return }
+    const requestId = ++requestSequence.current
+    setBusy(true)
+    try {
+      const nextReport = await getBookingAnalytics({ data: { from, to } })
+      if (requestId === requestSequence.current) setReport(nextReport)
+    } catch (error) {
+      if (requestId === requestSequence.current) toast.error(error instanceof Error ? error.message : 'Could not load analytics for that range.')
+    } finally {
+      if (requestId === requestSequence.current) setBusy(false)
+    }
+  }
+  const activity = chartBuckets(report.byDay)
+  const maxDaily = Math.max(1, ...activity.map((entry) => entry.value))
   const maxType = Math.max(1, ...report.byType.map((entry) => entry.value))
-  return <div className="admin-page-stack"><PageIntro eyebrow="REPORTING" title="Analytics" description="Explore appointment activity and status trends from saved booking records." action={<Badge variant="outline">{busy ? 'Updating…' : `${report.total} bookings`}</Badge>}/><Card><CardHeader><CardTitle>Report range</CardTitle><CardDescription>Choose a preset or set a custom number of days.</CardDescription></CardHeader><CardContent><Tabs value={range} onValueChange={changeRange}><TabsList>{[['1','Today'],['7','7 days'],['30','30 days'],['90','90 days'],['custom','Custom']].map(([value,label]) => <TabsTrigger key={value} value={value}>{label}</TabsTrigger>)}</TabsList><TabsContent value="custom"><div className="custom-range-form"><Label>From<Input type="date" value={from} onChange={(event) => setFrom(event.target.value)}/></Label><Label>To<Input type="date" value={to} onChange={(event) => setTo(event.target.value)}/></Label><Button onClick={applyCustom} disabled={busy}>Apply range</Button></div></TabsContent></Tabs></CardContent></Card><div className="admin-metrics-grid analytics-summary"><MetricCard label="Total bookings" value={report.total} detail="Created in this range"/><MetricCard label="Confirmed" value={report.confirmed} detail="Current status"/><MetricCard label="Cancelled" value={report.cancelled} detail="Current status"/><MetricCard label="Upcoming" value={report.upcoming} detail="Confirmed, future date"/><MetricCard label="Completed" value={report.completed} detail="Confirmed, past date"/></div><div className="admin-overview-grid"><Card><CardHeader><CardTitle>Bookings over time</CardTitle><CardDescription>Bookings by creation date.</CardDescription></CardHeader><CardContent><div className="analytics-chart" role="img" aria-label="Daily booking counts"><div className="analytics-chart-bars">{report.byDay.slice(-30).map((item) => <div className="analytics-chart-bar" key={item.label} title={`${item.label}: ${item.value}`}><span style={{ height: `${item.value ? Math.max(6, item.value / maxDaily * 100) : 0}%` }}/></div>)}</div><div className="analytics-chart-labels"><span>{report.byDay[0]?.label}</span><span>{report.byDay.at(-1)?.label}</span></div></div></CardContent></Card><Card><CardHeader><CardTitle>By appointment type</CardTitle><CardDescription>All statuses for bookings created in range.</CardDescription></CardHeader><CardContent className="analytics-type-bars">{report.byType.map((item) => <div key={item.label}><span>{item.label}</span><div><i style={{ width: `${item.value / maxType * 100}%` }}/></div><b>{item.value}</b></div>)}{report.byType.length === 0 && <div className="admin-empty"><CalendarDays/><b>No bookings in range</b><span>Try a wider date range.</span></div>}</CardContent></Card></div></div>
+  return <div className="admin-page-stack"><PageIntro eyebrow="REPORTING" title="Analytics" description="Explore appointment activity and status trends from saved booking records." action={<Badge variant="outline">{busy ? 'Updating...' : report.total + ' bookings'}</Badge>}/><Card><CardHeader><CardTitle>Report range</CardTitle><CardDescription>Choose a preset or set a custom date range of up to 365 days.</CardDescription></CardHeader><CardContent><Tabs value={range} onValueChange={changeRange}><TabsList>{[['1','Today'],['7','7 days'],['30','30 days'],['90','90 days'],['custom','Custom']].map(([value,label]) => <TabsTrigger key={value} value={value}>{label}</TabsTrigger>)}</TabsList><TabsContent value="custom"><div className="custom-range-form"><Label>From<Input type="date" value={from} onChange={(event) => setFrom(event.target.value)}/></Label><Label>To<Input type="date" value={to} onChange={(event) => setTo(event.target.value)}/></Label><Button onClick={() => void applyCustom()} disabled={busy}>Apply range</Button></div></TabsContent></Tabs></CardContent></Card><div className="admin-metrics-grid analytics-summary"><MetricCard label="Total bookings" value={report.total} detail="Created in this range"/><MetricCard label="Confirmed" value={report.confirmed} detail="Current status"/><MetricCard label="Cancelled" value={report.cancelled} detail="Current status"/><MetricCard label="Upcoming" value={report.upcoming} detail="Confirmed, future date"/><MetricCard label="Completed" value={report.completed} detail="Confirmed, past date"/></div><div className="admin-overview-grid"><Card><CardHeader><CardTitle>Bookings over time</CardTitle><CardDescription>{report.byDay.length > 30 ? 'Bookings by creation date, grouped to fit the selected range.' : 'Bookings by local creation date in the selected range.'}</CardDescription></CardHeader><CardContent>{report.total === 0 ? <div className="admin-empty"><CalendarDays/><b>No bookings in range</b><span>Try a wider date range. The chart updates when bookings are created.</span></div> : <><div className="analytics-chart" role="img" aria-label="Booking counts across the selected date range"><div className="analytics-chart-bars">{activity.map((item) => <div className="analytics-chart-bar" key={item.label + '-' + item.endLabel} title={item.label + (item.endLabel !== item.label ? ' to ' + item.endLabel : '') + ': ' + item.value}><span style={{ height: (item.value ? Math.max(6, item.value / maxDaily * 100) : 0) + '%' }}/></div>)}</div><div className="analytics-chart-labels"><span>{activity[0]?.label}</span><span>{activity.at(-1)?.endLabel}</span></div></div></>}</CardContent></Card><Card><CardHeader><CardTitle>By appointment type</CardTitle><CardDescription>All statuses for bookings created in range.</CardDescription></CardHeader><CardContent className="analytics-type-bars">{report.byType.map((item) => <div key={item.label}><span>{item.label}</span><div><i style={{ width: (item.value / maxType * 100) + '%' }}/></div><b>{item.value}</b></div>)}{report.byType.length === 0 && <div className="admin-empty"><CalendarDays/><b>No bookings in range</b><span>Try a wider date range.</span></div>}</CardContent></Card></div></div>
 }
-
 export function AccountSettingsPage({ profile }: { profile: AdminProfile }) {
   const router = useRouter()
   const [name, setName] = useState(profile.name)

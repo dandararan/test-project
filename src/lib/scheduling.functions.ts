@@ -24,6 +24,16 @@ const localDate = (instant: Date, timezone: string) => {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(instant)
   return `${parts.find((part) => part.type === 'year')?.value}-${parts.find((part) => part.type === 'month')?.value}-${parts.find((part) => part.type === 'day')?.value}`
 }
+const addCalendarDays = (date: string, offset: number) => {
+  const value = new Date(`${date}T12:00:00Z`)
+  value.setUTCDate(value.getUTCDate() + offset)
+  return `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())}`
+}
+const isValidDateLabel = (date: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
+  const parsed = new Date(`${date}T00:00:00Z`)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date
+}
 const localMinute = (instant: Date, timezone: string) => {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(instant)
   return Number(parts.find((part) => part.type === 'hour')?.value) * 60 + Number(parts.find((part) => part.type === 'minute')?.value)
@@ -290,26 +300,34 @@ export const rescheduleVisitorBooking = createServerFn({ method: 'POST' }).valid
   })
 })
 
-export const getBookingAnalytics = createServerFn().validator(z.object({ days: z.number().int().min(1).max(365).default(30), from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).refine((range) => !range.from || !range.to || range.from <= range.to, 'Start date must be before end date.')).handler(async ({ data }) => {
+export const getBookingAnalytics = createServerFn().validator(z.object({ days: z.number().int().min(1).max(365).default(30), from: z.string().refine(isValidDateLabel, 'Choose a valid start date.').optional(), to: z.string().refine(isValidDateLabel, 'Choose a valid end date.').optional() }).refine((range) => !range.from || !range.to || range.from <= range.to, 'Start date must be before end date.').refine((range) => !range.from || !range.to || (Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86400000 < 365, 'Choose a date range of 365 days or less.')).handler(async ({ data }) => {
   await assertAdmin()
   const timezone = (await prisma.schedulingSettings.findUnique({ where: { id: 'default' }, select: { timezone: true } }))?.timezone ?? 'Asia/Manila'
   const now = new Date()
-  const since = data.from ? zonedDateTimeToUtc(data.from, '00:00', timezone) : new Date(now.getTime() - data.days * 86400000)
-  const until = data.to ? new Date(zonedDateTimeToUtc(data.to, '00:00', timezone).getTime() + 86400000 - 1) : now
-  const all = await prisma.booking.findMany({ where: { createdAt: { gte: since, lte: until } }, select: { typeTitle: true, status: true, createdAt: true, date: true } })
-  const typeCounts: Record<string, number> = {}
+  const today = localDate(now, timezone)
+  const startLabel = data.from ?? addCalendarDays(today, 1 - data.days)
+  const endLabel = data.to ?? today
+  if (startLabel > endLabel) throw new Error('The selected date range cannot end before it starts.')
+  const since = zonedDateTimeToUtc(startLabel, '00:00', timezone)
+  const untilExclusive = zonedDateTimeToUtc(addCalendarDays(endLabel, 1), '00:00', timezone)
+  const all = await prisma.booking.findMany({ where: { createdAt: { gte: since, lt: untilExclusive } }, select: { typeTitle: true, status: true, createdAt: true, date: true } })
+  const typeCounts = new Map<string, number>()
+  const dailyCounts = new Map<string, number>()
   let confirmed = 0
   let cancelled = 0
   for (const booking of all) {
-    typeCounts[booking.typeTitle] = (typeCounts[booking.typeTitle] ?? 0) + 1
+    typeCounts.set(booking.typeTitle, (typeCounts.get(booking.typeTitle) ?? 0) + 1)
+    const label = localDate(booking.createdAt, timezone)
+    dailyCounts.set(label, (dailyCounts.get(label) ?? 0) + 1)
     if (booking.status === 'CONFIRMED') confirmed++
     if (booking.status === 'CANCELLED') cancelled++
   }
-  const today = localDate(now, timezone)
   const completed = all.filter((booking) => booking.status === 'CONFIRMED' && booking.date < today).length
-  const startLabel = localDate(since, timezone)
-  const endLabel = localDate(until, timezone)
-  const rangeDays = Math.max(1, Math.min(90, Math.floor((Date.parse(`${endLabel}T00:00:00Z`) - Date.parse(`${startLabel}T00:00:00Z`)) / 86400000) + 1))
-  const byDay = Array.from({ length: rangeDays }, (_, index) => { const day = new Date(`${startLabel}T12:00:00Z`); day.setUTCDate(day.getUTCDate() + index); const label = `${day.getUTCFullYear()}-${pad(day.getUTCMonth() + 1)}-${pad(day.getUTCDate())}`; return { label, value: all.filter((booking) => localDate(booking.createdAt, timezone) === label).length } })
-  return { total: all.length, confirmed, cancelled, upcoming: all.filter((booking) => booking.status === 'CONFIRMED' && booking.date >= today).length, completed, byType: Object.entries(typeCounts).map(([label, value]) => ({ label, value })), byDay }
+  const rangeDays = Math.floor((Date.parse(`${endLabel}T00:00:00Z`) - Date.parse(`${startLabel}T00:00:00Z`)) / 86400000) + 1
+  const byDay = Array.from({ length: rangeDays }, (_, index) => {
+    const label = addCalendarDays(startLabel, index)
+    return { label, value: dailyCounts.get(label) ?? 0 }
+  })
+  const byType = [...typeCounts].map(([label, value]) => ({ label, value })).sort((left, right) => right.value - left.value)
+  return { total: all.length, confirmed, cancelled, upcoming: all.filter((booking) => booking.status === 'CONFIRMED' && booking.date >= today).length, completed, byType, byDay }
 })
