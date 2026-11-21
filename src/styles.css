@@ -113,3 +113,9 @@ body { min-width: 320px; }
 .type-catalog p { font-size: 13px; line-height: 1.6; }
 .admin-weekday { color: #687487; font-size: 12px; }
 .admin-overview-grid > [data-slot=card], .admin-page-stack > [data-slot=card], .appointment-types-layout > [data-slot=card], .type-catalog > [data-slot=card] { border-color: #dcd9d2; }
+
+.booking-section .calendar-grid button.has-slots::after { left: 50%; transform: translateX(-50%); background: #5e9370; }
+.booking-section .calendar-grid button.chosen::after { background: #fff; }
+.booking-section .calendar-legend span:first-child i { background: #5e9370; }
+.booking-section .calendar-legend span:nth-child(2) i { background: #1d2d49; }
+.booking-section .calendar-legend span:nth-child(3) i { background: #d7d9d8; }

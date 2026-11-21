@@ -65,7 +65,9 @@ async function initialize() {
 async function assertAdmin() {
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
   const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase()
-  if (!session?.user || !adminEmail || session.user.email.toLowerCase() !== adminEmail) throw new Error('Administrator access required')
+  if (!session?.user) throw new Error('Authentication required')
+  if (!adminEmail) throw new Error('Administrator access is not configured')
+  if (session.user.email.toLowerCase() !== adminEmail) throw new Error('Administrator access required')
   return session.user
 }
 

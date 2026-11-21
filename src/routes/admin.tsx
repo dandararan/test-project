@@ -7,7 +7,11 @@ export const Route = createFileRoute('/admin')({
     try {
       return await getAdminProfile()
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Administrator access required')) {
+      const message = error instanceof Error ? error.message : ''
+      if (message.includes('Administrator access is not configured')) {
+        throw redirect({ to: '/', search: { admin: true, reason: 'admin-config' } })
+      }
+      if (message === 'Authentication required' || message.includes('Administrator access required')) {
         throw redirect({ to: '/', search: { admin: true, reason: 'unauthorized' } })
       }
       throw error

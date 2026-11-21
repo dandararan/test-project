@@ -18,5 +18,5 @@ export function formatTimeRange(startTime: string, durationMinutes: number) {
   if (hour < 1 || hour > 12 || minute > 59) return startTime
 
   const startMinutes = (hour % 12 + (match[3] === 'PM' ? 12 : 0)) * 60 + minute
-  return `${formatClock(startMinutes)} – ${formatClock(startMinutes + durationMinutes)}`
+  return `${formatClock(startMinutes)} \u2013 ${formatClock(startMinutes + durationMinutes)}`
 }
