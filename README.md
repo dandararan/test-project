@@ -41,10 +41,13 @@ Configure Preview environment variables separately if you use Vercel preview dep
 
 ## Sample data and limitations
 
-Appointment types and weekday hours are created automatically when the app first accesses scheduling data. Existing confirmed appointments are preserved when settings change. Email delivery, a full week/day admin calendar, admin-side booking edits and rescheduling, custom analytics date ranges, and throttling for visitor lookup are future work. Visitor cancellation and rescheduling require both the booking reference and matching email.
+Appointment types and weekday hours are created automatically when the app first accesses scheduling data. Existing confirmed appointments are preserved when settings change. Confirmation, cancellation, and rescheduling notices are simulated rather than emailed. Visitor cancellation and rescheduling require both the booking reference and matching email.
 
 The schema is pushed directly for local setup; production deployments should use reviewed Prisma migrations. Check your database provider's connection mode before relying on transaction locks in production.
 
-## AI disclosure
+## Development notes
 
-This codebase was developed with AI assistance. Future work should add operational email delivery, a full week/day admin calendar, admin-side booking edits, automated integration tests against a provisioned database, and production migration review.
+- **AI assistance:** OpenAI Codex with GPT-6 Luna at extra-high effort.
+- **Tools used for the latest scheduling change:** Codex workspace tools, Node.js/npm, TypeScript (`tsc --noEmit`), and the Vite production build (`npm run build`).
+- **Core technologies:** React 19, TypeScript, TanStack Start and Router, Tailwind CSS, shadcn/ui with Radix UI, Prisma, PostgreSQL (including Supabase), and Better Auth.
+- **Suggested next improvements:** add real transactional email, automated scheduling and database integration tests, rate limits for public booking and lookup, richer analytics date ranges, and reviewed Prisma migrations for production.

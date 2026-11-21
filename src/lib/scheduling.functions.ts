@@ -94,7 +94,8 @@ type ScheduleType = { id: string; active: boolean; duration: number; maxBookingD
 type ScheduleRules = { timezone: string; bookingWindowDays: number; minimumNoticeHour: number; dailyLimit: number; bufferMinutes: number } | null
 type ScheduleDay = { enabled: boolean; periods: unknown } | null
 type ScheduleException = { blocked: boolean; periods: unknown | null } | null
-function calculateAvailableTimes(date: string, type: ScheduleType, day: ScheduleDay, exception: ScheduleException, settings: ScheduleRules, bookings: { reference: string; typeId: string; startMinute: number; duration: number }[], bufferByType: Map<string, number>, excludeReference?: string, now = new Date()) {
+type TimeSlotOption = { time: string; available: boolean }
+function calculateTimeSlotOptions(date: string, type: ScheduleType, day: ScheduleDay, exception: ScheduleException, settings: ScheduleRules, bookings: { reference: string; typeId: string; startMinute: number; duration: number }[], bufferByType: Map<string, number>, excludeReference?: string, now = new Date()): TimeSlotOption[] {
   if (!type.active || exception?.blocked || (!exception && !day?.enabled)) return []
   const timezone = settings?.timezone ?? 'Asia/Manila'
   const today = localDate(now, timezone)
@@ -102,19 +103,21 @@ function calculateAvailableTimes(date: string, type: ScheduleType, day: Schedule
   if (daysOut < 0 || daysOut > (type.maxBookingDays ?? settings?.bookingWindowDays ?? 60)) return []
   const occupied = bookings.filter((booking) => booking.reference !== excludeReference)
   const countForLimit = type.dailyLimit == null ? occupied.length : occupied.filter((booking) => booking.typeId === type.id).length
-  if (countForLimit >= (type.dailyLimit ?? settings?.dailyLimit ?? 10)) return []
+  const dailyLimitReached = countForLimit >= (type.dailyLimit ?? settings?.dailyLimit ?? 10)
   const workPeriods = exception && exception.periods !== null ? exception.periods as { start: number; end: number }[] : day?.periods as { start: number; end: number }[] ?? []
   if (!workPeriods.length) return []
   const buffer = type.bufferMinutes ?? settings?.bufferMinutes ?? 10
-  return times.filter((time) => {
+  return times.flatMap((time) => {
     const start = minutes(time)
-    if (!workPeriods.some((period) => start >= period.start && start + type.duration <= period.end)) return false
-    if (date === today && start < localMinute(now, timezone) + (settings?.minimumNoticeHour ?? 3) * 60) return false
-    return !occupied.some((booking) => conflicts(start, type.duration, buffer, booking, bufferByType.get(booking.typeId) ?? settings?.bufferMinutes ?? 10))
+    if (!workPeriods.some((period) => start >= period.start && start + type.duration <= period.end)) return []
+    if (date === today && start < localMinute(now, timezone) + (settings?.minimumNoticeHour ?? 3) * 60) return []
+    const available = !dailyLimitReached && !occupied.some((booking) => conflicts(start, type.duration, buffer, booking, bufferByType.get(booking.typeId) ?? settings?.bufferMinutes ?? 10))
+    return [{ time, available }]
   })
 }
 
-export const getAvailableTimes = createServerFn().validator(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), typeId: z.string().min(1), excludeReference: z.string().optional() })).handler(async ({ data }) => {
+const availableTimeRequest = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), typeId: z.string().min(1), excludeReference: z.string().optional() })
+async function loadTimeSlotOptions(data: z.infer<typeof availableTimeRequest>) {
   await initialize()
   const weekday = new Date(`${data.date}T12:00:00Z`).getUTCDay()
   const [day, exception, type, settings, bookings] = await Promise.all([
@@ -127,7 +130,15 @@ export const getAvailableTimes = createServerFn().validator(z.object({ date: z.s
   if (!type) return []
   const existingTypes = await prisma.appointmentType.findMany({ where: { id: { in: [...new Set(bookings.map((booking) => booking.typeId))] } }, select: { id: true, bufferMinutes: true } })
   const bufferByType = new Map(existingTypes.map((item) => [item.id, item.bufferMinutes ?? settings?.bufferMinutes ?? 10]))
-  return calculateAvailableTimes(data.date, type, day, exception, settings, bookings, bufferByType, data.excludeReference)
+  return calculateTimeSlotOptions(data.date, type, day, exception, settings, bookings, bufferByType, data.excludeReference)
+}
+
+export const getAvailableTimes = createServerFn().validator(availableTimeRequest).handler(async ({ data }) => {
+  return (await loadTimeSlotOptions(data)).filter((option) => option.available).map((option) => option.time)
+})
+
+export const getAvailableTimeOptions = createServerFn().validator(availableTimeRequest).handler(async ({ data }) => {
+  return loadTimeSlotOptions(data)
 })
 
 export const getAvailableDates = createServerFn().validator(z.object({ year: z.number().int().min(2020).max(2100), month: z.number().int().min(0).max(11), typeId: z.string().min(1) })).handler(async ({ data }) => {
@@ -149,7 +160,7 @@ export const getAvailableDates = createServerFn().validator(z.object({ year: z.n
   const bookingsByDate = new Map<string, typeof bookings>()
   for (const booking of bookings) bookingsByDate.set(booking.date, [...(bookingsByDate.get(booking.date) ?? []), booking])
   const dates = Array.from({ length: new Date(data.year, data.month + 1, 0).getDate() }, (_, index) => `${data.year}-${pad(data.month + 1)}-${pad(index + 1)}`)
-  return dates.filter((date) => calculateAvailableTimes(date, type, daysByWeekday.get(new Date(`${date}T12:00:00Z`).getUTCDay()) ?? null, exceptionsByDate.get(date) ?? null, settings, bookingsByDate.get(date) ?? [], bufferByType).length > 0)
+  return dates.flatMap((date) => { const options = calculateTimeSlotOptions(date, type, daysByWeekday.get(new Date(`${date}T12:00:00Z`).getUTCDay()) ?? null, exceptionsByDate.get(date) ?? null, settings, bookingsByDate.get(date) ?? [], bufferByType); return options.length ? [{ date, available: options.some((option) => option.available) }] : [] })
 })
 
 export const createBooking = createServerFn({ method: 'POST' })
