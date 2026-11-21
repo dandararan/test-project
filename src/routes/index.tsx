@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDownRight, ArrowLeft, ArrowRight, CalendarDays, Check, Clock3, Compass, FileText, LayoutDashboard, Mail, Menu, MoreHorizontal, Plus, Search, Settings2, ShieldCheck, Sparkles, UsersRound, Video, X } from 'lucide-react'
 import { authClient } from '#/lib/auth-client'
@@ -8,6 +8,10 @@ import { formatTimeRange } from '#/lib/time-range'
 
 export const Route = createFileRoute('/')({
   validateSearch: (search: Record<string, unknown>) => ({ admin: search.admin === 'login' || search.admin === 'true' || search.admin === true, reason: typeof search.reason === 'string' ? search.reason : undefined }),
+  beforeLoad: ({ search }) => {
+    const reason = search.reason === 'admin-config' ? 'admin-config' : search.reason === 'unauthorized' ? 'unauthorized' : undefined
+    if (search.admin || reason) throw redirect({ to: '/admin/login', search: { reason } })
+  },
   component: LandingRoute,
 })
 

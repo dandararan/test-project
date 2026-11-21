@@ -18,6 +18,7 @@ import { Route as AdminAppointmentTypesRouteImport } from './routes/admin.appoin
 import { Route as AdminAppointmentsRouteImport } from './routes/admin.appointments'
 import { Route as AdminAvailabilityRouteImport } from './routes/admin.availability'
 import { Route as AdminCalendarRouteImport } from './routes/admin.calendar'
+import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -66,6 +67,11 @@ const AdminCalendarRoute = AdminCalendarRouteImport.update({
   path: '/calendar',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/availability': typeof AdminAvailabilityRoute
   '/admin/calendar': typeof AdminCalendarRoute
+  '/admin/login': typeof AdminLoginRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/': typeof AdminIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/availability': typeof AdminAvailabilityRoute
   '/admin/calendar': typeof AdminCalendarRoute
+  '/admin/login': typeof AdminLoginRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin': typeof AdminIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/availability': typeof AdminAvailabilityRoute
   '/admin/calendar': typeof AdminCalendarRoute
+  '/admin/login': typeof AdminLoginRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/': typeof AdminIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/admin/appointments'
     | '/admin/availability'
     | '/admin/calendar'
+    | '/admin/login'
     | '/admin/settings'
     | '/admin/'
     | '/api/auth/$'
@@ -139,6 +149,7 @@ export interface FileRouteTypes {
     | '/admin/appointments'
     | '/admin/availability'
     | '/admin/calendar'
+    | '/admin/login'
     | '/admin/settings'
     | '/admin'
     | '/api/auth/$'
@@ -152,6 +163,7 @@ export interface FileRouteTypes {
     | '/admin/appointments'
     | '/admin/availability'
     | '/admin/calendar'
+    | '/admin/login'
     | '/admin/settings'
     | '/admin/'
     | '/api/auth/$'
@@ -229,6 +241,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCalendarRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/settings': {
       id: '/admin/settings'
       path: '/settings'
@@ -252,6 +271,7 @@ interface AdminRouteChildren {
   AdminAppointmentsRoute: typeof AdminAppointmentsRoute
   AdminAvailabilityRoute: typeof AdminAvailabilityRoute
   AdminCalendarRoute: typeof AdminCalendarRoute
+  AdminLoginRoute: typeof AdminLoginRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
@@ -262,6 +282,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAppointmentsRoute: AdminAppointmentsRoute,
   AdminAvailabilityRoute: AdminAvailabilityRoute,
   AdminCalendarRoute: AdminCalendarRoute,
+  AdminLoginRoute: AdminLoginRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
