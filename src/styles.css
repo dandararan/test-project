@@ -122,6 +122,21 @@ body { min-width: 320px; }
 .booking-section .calendar-legend span:nth-child(2) i { background: #1d2d49; }
 .booking-section .calendar-legend span:nth-child(3) i { background: #d7d9d8; }
 
+:root {
+  --toast-success-bg: #f7ede7;
+  --toast-success-border: #e8c6b5;
+  --toast-success-text: #1d2d49;
+  --toast-info-bg: #f3f2ee;
+  --toast-info-border: #e4dfd5;
+  --toast-info-text: #33425a;
+  --toast-warning-bg: #fff6e8;
+  --toast-warning-border: #ecd9b1;
+  --toast-warning-text: #715c36;
+  --toast-error-bg: #fff1ec;
+  --toast-error-border: #efc9bc;
+  --toast-error-text: #8f4c3c;
+}
+
 .booking-section .slot.unavailable-slot,
 .booking-section .slot.unavailable-slot:hover {
   display: grid;
